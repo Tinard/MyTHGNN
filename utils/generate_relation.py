@@ -40,7 +40,7 @@ def stock_cor_matrix(ref_dict, codes, n, processes=1):
         data[i, :] = calculate_pccs(ref_dict[codes[i]], ref_dict, n)
     return pd.DataFrame(data=data, index=codes, columns=codes)
 
-path1 = "/home/THGNN-main/data/csi300.pkl"
+path1 = "d:\\MyTHGNN\\data\\csi300.pkl"
 df1 = pickle.load(open(path1, 'rb'), encoding='utf-8')
 #prev_date_num Indicates the number of days in which stock correlation is calculated
 prev_date_num = 20
@@ -76,4 +76,4 @@ for i in range(len(dt)):
         result.iloc[i,i]=1
     t2 = time.time()
     print('time cost', t2 - t1, 's')
-    result.to_csv("/home/THGNN-main/data/relation/"+str(end_data)+".csv")
+    result.to_csv("d:\\MyTHGNN\\data\\relation\\"+str(end_data)+".csv")

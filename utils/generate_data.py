@@ -9,9 +9,9 @@ from torch.autograd import Variable
 
 feature_cols = ['open','high','low','close','to','vol']
 
-path1 = "/home/THGNN-main/data/csi300.pkl"
+path1 = "d:\\MyTHGNN\\data\\csi300.pkl"
 df1 = pickle.load(open(path1, 'rb'), encoding='utf-8')
-relation = os.listdir('/home/THGNN-main/data/relation/')
+relation = os.listdir('d:\\MyTHGNN\\data\\relation\\')
 relation = sorted(relation)
 date_unique=df1['dt'].unique()
 stock_trade_data=date_unique.tolist()
@@ -21,7 +21,7 @@ df1['dt']=df1['dt'].astype('datetime64')
 
 def fun(relation_dt, start_dt_month, end_dt_month,df1):
     prev_date_num = 20
-    adj_all = pd.read_csv('/home/THGNN-main/data/relation/'+relation_dt+'.csv', index_col=0)
+    adj_all = pd.read_csv('d:\\MyTHGNN\\data\\relation\\'+relation_dt+'.csv', index_col=0)
     adj_stock_set = list(adj_all.index)
     pos_g = nx.Graph(adj_all > 0.1)
     pos_adj = nx.adjacency_matrix(pos_g).toarray()
@@ -65,10 +65,10 @@ def fun(relation_dt, start_dt_month, end_dt_month,df1):
         labels = torch.tensor(labels, dtype=torch.float32)
         result = {'pos_adj': Variable(pos_adj), 'neg_adj': Variable(neg_adj),  'features': Variable(features),
                   'labels': Variable(labels), 'mask': mask}
-        with open('/home/THGNN-main/data/data_train_predict/'+end_data+'.pkl', 'wb') as f:
+        with open('d:\\MyTHGNN\\data\\data_train_predict\\'+end_data+'.pkl', 'wb') as f:
             pickle.dump(result, f)
         df = pd.DataFrame(columns=['code', 'dt'], data=day_last_code)
-        df.to_csv('/home/THGNN-main/data/daily_stock/'+end_data+'.csv', header=True, index=False, encoding='utf_8_sig')
+        df.to_csv('d:\\MyTHGNN\\data\\daily_stock\\'+end_data+'.csv', header=True, index=False, encoding='utf_8_sig')
         
 #The first parameter and third parameters indicate the last trading day of each month, and the second parameter indicates the first trading day of each month.
 # for i in ['2020','2021','2022']:
