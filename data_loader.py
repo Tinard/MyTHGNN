@@ -15,7 +15,9 @@ class AllGraphDataSampler(data.Dataset):
             self.gnames_all.sort()
         
         # 如果使用的是专用数据集目录，则使用所有文件
-        if "train_set" in base_dir or "valid_set" in base_dir or "test_set" in base_dir:
+        if ("train" == mode and "train" in base_dir) or \
+           ("val" == mode and "valid" in base_dir) or \
+           ("test" == mode and "test" in base_dir):
             print(f"使用专用{self.mode}数据集目录: {base_dir}")
             # 使用所有文件，不需要切片
         else:
@@ -36,7 +38,13 @@ class AllGraphDataSampler(data.Dataset):
         for i in range(length):
             sys.stdout.flush()
             sys.stdout.write('{} data loading: {:.2f}%{}'.format(self.mode, i*100/length, '\r'))
-            data_all.append(pickle.load(open(os.path.join(self.data_dir, self.gnames_all[i]), "rb")))
+            try:
+                file_path = os.path.join(self.data_dir, self.gnames_all[i])
+                with open(file_path, "rb") as f:
+                    data_all.append(pickle.load(f))
+            except Exception as e:
+                print(f"\n错误: 无法加载文件 {self.gnames_all[i]}: {str(e)}")
+                raise
         print('{} data loaded!'.format(self.mode))
         return data_all
 

@@ -1,60 +1,110 @@
-# Temporal and Heterogeneous Graph Neural Network for Financial Time Series Prediction (THGNN)
-## 1. Prepare you training data
-The input to your model is a pkl file that includes the stock symbol `code`, the time `dt`, and the volume and price features. Then, you need to use `generate_relation.py` to generate daily stock relationships and `generate_data.py` to generate the final input data for the model. You can adjust the features used in building the stock relationship and generating the final input by changing `feature_cols`. The `relation` directory stores the relations between stocks. The `daily_stock` directory contains stocks that are trained each day. The `data_train_predict` directory stores the final inputs fed to the model each day. The `prediction` directory stores the prediction result of the validation set. The `model_saved` directory stores the trained model.
+# THGNN - 时序异构图神经网络
 
-## 2. Train you model
-* Before training, make sure to change the parameters in class `Args` and function `main`.
+这是一个基于时序异构图神经网络(Temporal Heterogeneous Graph Neural Network)的期货合约价格预测系统。
 
- ``` config
- adj_threshold = 0.1         # the threshold of the relations between stocks
- max_epochs = 60             # the number of training epochs
- epochs_eval = 10            # the number of training epochs per evaluation or test interval
- epochs_save_by = 60         # the number of training epochs before a model is saved
- lr = 0.0002                 # learning rate of the model
- gamma = 0.3                 # gamma
- hidden_dim = 128            # hidden_dim
- num_heads = 8               # num_heads
- out_features = 32           # out_features
- model_name = "StockHeteGAT" # The main model name in model.thgnn.py
- dropout = 0.1               # dropout
- batch_size = 1              # batch_size
- loss_fcn = mse_loss         # loss function
- epochs_save_by = 60         # the number of training epochs of the saved model
- data_start = 20             # index of training start date
- data_middle = 39            # index of evaluation or test start date/ index of training end date
- data_end = data_middle+4    # index of evaluation or test end date
- pre_data = '2021-12-29'     # save the last date of the training
- ```
+## 项目结构
 
-* Install required packages
+- `utils/generate_relation.py`: 生成归一化互信息矩阵，计算品种间关系强度
+- `utils/generate_graph_data.py`: 基于归一化互信息矩阵构建图结构数据
+- `process_data.py`: 数据处理主模块，调用上述两个模块完成数据处理
+- `model/Thgnn.py`: 模型定义，包含THGNN的网络结构
+- `trainer/trainer.py`: 训练器，包含训练和评估函数
+- `data_loader.py`: 数据加载器，用于读取处理后的图数据
+- `main.py`: 主程序，用于模型训练和预测
 
-  ``` shell
-  pip install -r requirements.txt  for specific versions
-  ```
+## 数据目录
 
-* Training 
+- `data/`: 处理后的数据存储目录
+  - `daily_stock/`: 日线数据
+  - `data_train_predict/`: 训练和预测用的图数据
+  - `relation/`: 品种间归一化互信息矩阵
+  - `model_saved/`: 保存的模型参数
+  - `prediction/`: 预测结果
 
-  ``` shell
-  sh train.sh
-  ```
-## 3. Citing
+## 使用方法
 
-* If you find **THGNN** is useful for your research, please consider citing the following papers:
+### 1. 数据处理
 
-  ``` latex
-  @inproceedings{Xiang2022Temporal,
-    author = {Xiang, Sheng and Cheng, Dawei and Shang, Chencheng and Zhang, Ying and Liang, Yuqi},
-    title = {Temporal and Heterogeneous Graph Neural Network for Financial Time Series Prediction},
-    year = {2022},
-    isbn = {9781450392365},
-    publisher = {Association for Computing Machinery},
-    address = {New York, NY, USA},
-    url = {https://doi.org/10.1145/3511808.3557089},
-    doi = {10.1145/3511808.3557089},
-    booktitle = {Proceedings of the 31st ACM International Conference on Information & Knowledge Management},
-    pages = {3584–3593},
-    numpages = {10},
-    location = {Atlanta, GA, USA},
-    series = {CIKM '22}
-}
-  ```
+运行数据处理程序，将原始期货数据转换为模型所需的格式：
+
+```bash
+python process_data.py
+```
+
+该程序会执行以下操作：
+- 生成品种间的归一化互信息矩阵
+- 基于互信息矩阵构建异构图数据
+
+也可以单独执行其中一个步骤：
+
+```bash
+# 仅生成归一化互信息矩阵
+python process_data.py --only-relation
+
+# 仅生成图结构数据（前提是互信息矩阵已存在）
+python process_data.py --only-graph
+```
+
+如需修改输入输出目录或特征配置，请直接编辑 `utils/generate_relation.py` 文件中的相关变量：
+- `FUTURES_DATA_DIR`: 输入数据目录
+- `DATA_OUTPUT_DIR`: 输出数据目录
+- `FEATURE_COLS`: 使用的特征列（当前仅保留动量因子相关特征）
+- `PREV_DATE_NUM`: 计算归一化互信息的天数
+
+### 2. 模型训练
+
+运行主程序进行模型训练：
+
+```bash
+python main.py
+```
+
+如需修改训练参数，请直接编辑 `main.py` 文件：
+- 在 `Args` 类中修改模型参数（如 `max_epochs`、`lr`、`batch_size` 等）
+- 在 `if __name__ == "__main__":` 部分修改 `pre_data` 值来改变模型保存名称
+
+训练完成后，模型会被保存到 `data/model_saved/` 目录。
+
+### 3. 特征配置
+
+当前使用的特征为动量因子相关特征：
+- ROC_5：5日价格变化率
+- ROC_10：10日价格变化率
+- MACD：平滑异同移动平均线
+- MACD_Signal：MACD信号线
+- MACD_Hist：MACD柱状图
+- RSI：相对强弱指标
+- return：收益率
+
+## 技术架构
+
+该项目实现了一个时序异构图神经网络，用于期货价格预测：
+
+1. 基于归一化互信息计算品种间关系强度
+2. 使用GRU编码时序特征
+3. 使用多头图注意力网络处理异构图结构
+4. 通过语义层次的注意力机制融合不同类型的图信息
+5. 支持二分类和回归任务
+
+## 最近更新
+
+- 将相关性计算替换为归一化互信息(NMI)计算，更好地捕捉非线性关系
+- 特征选择优化为仅保留动量因子相关特征
+- 使用'return'列计算互信息，更准确地表示品种间关系
+- 将数据处理模块重构为两个独立模块，提高代码可维护性
+
+## 需求环境
+
+- Python 3.6+
+- PyTorch 1.7+
+- scikit-learn (用于互信息计算)
+- pandas
+- numpy
+- networkx
+- tqdm
+
+## 安装依赖
+
+```bash
+pip install torch pandas numpy networkx tqdm scikit-learn
+```
