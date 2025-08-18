@@ -18,6 +18,10 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+ 
+# VS Code 配置和日志目录
+.vscode/
+logs/
 .eggs/
 lib/
 lib64/
