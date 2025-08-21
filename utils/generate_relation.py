@@ -30,20 +30,18 @@ FUTURES_DATA_DIR = "d:\\MyTHGNN\\futures_data"  # 原始期货数据目录
 DATA_OUTPUT_DIR = "d:\\MyTHGNN\\data"           # 输出根目录
 
 # 特征列定义 - 修改为仅包含动量因子相关特征，并添加return列
-FEATURE_COLS = ["ROC_5", "ROC_10", "MACD", "MACD_Signal", "MACD_Hist", "RSI", "return"]
+FEATURE_COLS = ["ROC_5", "ROC_10", "MACD", "MACD_Signal", "MACD_Hist", "RSI", "logreturn"]
 
 # 相关性计算的天数
 PREV_DATE_NUM = 20  # 修改为使用20个交易日计算互信息
 
-def calculate_mutual_information(x, y, bins=10):
+def calculate_mutual_information(x, y):
     """
     计算两个时间序列的归一化互信息值
     
     参数:
         x: 第一个时间序列的收益率数据
         y: 第二个时间序列的收益率数据
-        bins: 离散化时的箱数
-    
     返回:
         归一化互信息值: NMI(X,Y) = MI(X,Y)/sqrt(H(X)*H(Y))
     """
@@ -93,28 +91,18 @@ def calculate_mutual_information(x, y, bins=10):
 
 def calculate_mi_matrix(xs, yss):
     """计算一个时间序列与多个时间序列的归一化互信息值"""
+    if 'return' in FEATURE_COLS:
+        idx = FEATURE_COLS.index('return')
+    else:
+        raise ValueError("FEATURE_COLS 必须包含 'return' 用于互信息计算")
+
     result = []
     for name in yss:
         ys = yss[name]
-        
-        # 只使用'return'列计算互信息
-        # 寻找return列的位置
-        return_idx = -1
-        for i, feat in enumerate(FEATURE_COLS):
-            if feat == 'return':
-                return_idx = i
-                break
-        
-        # 使用return列计算互信息
-        if return_idx >= 0 and return_idx < len(xs):
-            return_x = xs[return_idx]
-            return_y = ys[return_idx]
-            nmi = calculate_mutual_information(return_x, return_y)
-            result.append(nmi)
-        else:
-            # 如果找不到return列，直接报错
-            raise ValueError("未找到return列，无法计算互信息。请检查FEATURE_COLS和数据格式。")
-    
+        return_x = xs[idx]
+        return_y = ys[idx]
+        nmi = calculate_mutual_information(return_x, return_y)
+        result.append(nmi)
     return np.array(result)
 
 def stock_mutual_info_matrix(ref_dict, codes, processes=1):
@@ -208,9 +196,6 @@ def load_dataset(dataset_name):
         df[FEATURE_COLS] = df[FEATURE_COLS].fillna(0)
         print(f"NaN 值处理完成")
     
-    # 将label转换为二分类标签（label为正时为1，为负时为0）
-    df['label'] = (df['label'] > 0).astype(int)
-    
     return df
 
 def generate_relation_files(datasets):
@@ -231,58 +216,35 @@ def generate_relation_files(datasets):
             end_date = all_dates[i]
             end_date_str = pd.Timestamp(end_date).strftime('%Y-%m-%d')
             
-            # 检查是否已经存在该日期的矩阵文件
+            # 输出当前处理日期
             output_file = os.path.join(relation_dir, f"{end_date_str}.csv")
-            if os.path.exists(output_file) and dataset_name != 'merged':
-                print(f"跳过 {end_date_str}，矩阵文件已存在")
-                continue
-                
             print(f"\n处理 {end_date_str} 的归一化互信息矩阵")
 
             # 获取历史数据的起始日期
             start_date_idx = max(0, i - PREV_DATE_NUM + 1)  # 确保不会越界
             start_date = all_dates[start_date_idx]
-            
+
             # 计算实际可用的历史天数
             available_days = i - start_date_idx + 1
             if available_days < PREV_DATE_NUM:
                 print(f"注意: {end_date_str} 只有 {available_days} 天历史数据可用，少于要求的 {PREV_DATE_NUM} 天")
-                # 我们继续处理，但会在后续步骤中填充缺失的历史数据
+                # 继续处理，后续步骤会填充缺失的历史数据
 
             # 筛选时间范围内的数据
             period_data = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
 
-            # 按期货代码整理特征数据
+            # 按期货代码整理特征数据，只保留 FEATURE_COLS 顺序
             code_features = {}
             for code in period_data['symbol'].unique():
-                code_data = period_data[period_data['symbol'] == code]
-                # 确保数据按日期排序
-                code_data = code_data.sort_values('date')
-                
-                # 如果数据天数不足，需要填充
+                code_data = period_data[period_data['symbol'] == code].sort_values('date')
+                # 如果数据天数不足，记录提示
                 if len(code_data) < PREV_DATE_NUM:
-                    # 计算需要补齐的天数
                     pad_len = PREV_DATE_NUM - len(code_data)
                     print(f"代码 {code} 的历史数据不足 {PREV_DATE_NUM} 天，只有 {len(code_data)} 天，计算互信息时将考虑数据填充影响")
-                
-                # 提取特征
-                features = []
-                for feature in FEATURE_COLS:
-                    if feature in code_data.columns:
-                        feat_values = code_data[feature].values
-                        if np.isnan(feat_values).any():
-                            print(f"警告: {code} 的 {feature} 中包含 NaN 值，替换为 0")
-                            feat_values = np.nan_to_num(feat_values, nan=0.0)
-                        features.append(feat_values)
-                    else:
-                        # 如果缺少特征，使用零向量
-                        print(f"警告: {code} 缺少 {feature} 特征，使用零向量代替")
-                        # 获取返回向量长度来创建零向量
-                        if 'return' in code_data.columns:
-                            features.append(np.zeros_like(code_data['return'].values))
-                        else:
-                            features.append(np.zeros(len(code_data)))
-                
+                # 直接按 FEATURE_COLS 提取特征，缺失则补零
+                features = [code_data[feat].values if feat in code_data.columns else np.zeros(len(code_data)) for feat in FEATURE_COLS]
+                # 检查并填充 NaN
+                features = [np.nan_to_num(f, nan=0.0) for f in features]
                 code_features[code] = np.array(features)
 
             # 至少需要2个合约才能计算互信息
