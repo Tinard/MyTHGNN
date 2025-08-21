@@ -146,18 +146,9 @@ def ensure_directories():
     dirs = [
         os.path.join(DATA_OUTPUT_DIR, "data_train_predict"),
         os.path.join(DATA_OUTPUT_DIR, "daily_stock"),
-        os.path.join(DATA_OUTPUT_DIR, "relation"),
+        os.path.join(DATA_OUTPUT_DIR, "relation", "merged"),
         os.path.join(DATA_OUTPUT_DIR, "prediction")
     ]
-    
-    # 为每个数据集创建子目录
-    for dataset_name in ['train', 'valid', 'test']:
-        dirs.extend([
-            os.path.join(DATA_OUTPUT_DIR, "data_train_predict", dataset_name),
-            os.path.join(DATA_OUTPUT_DIR, "daily_stock", dataset_name),
-            os.path.join(DATA_OUTPUT_DIR, "relation", dataset_name)
-        ])
-    
     for directory in dirs:
         os.makedirs(directory, exist_ok=True)
         print(f"确保目录存在: {directory}")
@@ -226,17 +217,14 @@ def generate_relation_files(datasets):
     """为每个数据集生成归一化互信息矩阵文件"""
     for dataset_name, df in datasets.items():
         print(f"\n开始处理 {dataset_name} 的归一化互信息矩阵...")
-        
-        # 创建数据集特定的输出目录
-        relation_dir = os.path.join(DATA_OUTPUT_DIR, "relation", dataset_name)
+        # 只保留 merged 目录
+        relation_dir = os.path.join(DATA_OUTPUT_DIR, "relation", "merged")
         os.makedirs(relation_dir, exist_ok=True)
-        
         # 遍历所有可用日期，为每一天生成相关性矩阵
         all_dates = sorted(df['date'].unique())
         if len(all_dates) < PREV_DATE_NUM:
             print(f"{dataset_name} 没有足够的数据天数，跳过")
             continue
-
         print(f"{dataset_name} 共 {len(all_dates)} 个交易日，将为每一天生成归一化互信息矩阵")
 
         for i in range(PREV_DATE_NUM - 1, len(all_dates)):
@@ -326,50 +314,30 @@ def main():
     # 确保所有目录存在
     ensure_directories()
 
-    # 加载所有数据集
-    datasets = {}
+    # 只加载合并数据集
     merged_df = None
-    
-    for dataset_name in ['train', 'valid', 'test']:
-        df = load_dataset(dataset_name)
-        if df is not None:
-            # 添加数据集标识，便于后续分割
-            df['dataset'] = dataset_name
-            datasets[dataset_name] = df
-            print(f"{dataset_name} 加载完成: {len(df)} 条记录, {df['symbol'].nunique()} 个合约")
-            print(f"时间范围: {df['date'].min()} 至 {df['date'].max()}")
-            print(f"特征: {FEATURE_COLS}")
-            print(f"标签分布: {df['label'].value_counts().to_dict()}")
-            
-            # 合并到统一数据集
-            if merged_df is None:
-                merged_df = df
-            else:
-                merged_df = pd.concat([merged_df, df], ignore_index=True)
-
-    if not datasets:
-        print("错误: 没有找到任何数据集，无法继续处理")
+    merged_path = os.path.join(FUTURES_DATA_DIR, "merged_features.csv")
+    if os.path.exists(merged_path):
+        print(f"加载 merged_features.csv...")
+        merged_df = pd.read_csv(merged_path)
+        if 'date' in merged_df.columns:
+            merged_df['date'] = pd.to_datetime(merged_df['date'])
+        print(f"合并数据集加载完成: {len(merged_df)} 条记录, {merged_df['symbol'].nunique()} 个合约")
+        print(f"时间范围: {merged_df['date'].min()} 至 {merged_df['date'].max()}")
+        print(f"特征: {FEATURE_COLS}")
+        print(f"标签分布: {merged_df['label'].value_counts().to_dict()}")
+    else:
+        print(f"错误: {merged_path} 不存在，无法处理")
         return False
 
-    if merged_df is not None:
-        print("\n创建合并数据集完成:")
-        print(f"总记录数: {len(merged_df)}")
-        print(f"总合约数: {merged_df['symbol'].nunique()}")
-        print(f"总时间范围: {merged_df['date'].min()} 至 {merged_df['date'].max()}")
-        
-        # 对合并后的数据处理
-        print("\n处理合并后的完整数据集...")
-        
-        # 将合并后的数据按照日期排序
-        merged_df = merged_df.sort_values('date')
-        
-        # 以统一方式为所有日期生成归一化互信息矩阵
-        generate_relation_files({'merged': merged_df})
+    print("\n处理合并后的完整数据集...")
+    merged_df = merged_df.sort_values('date')
+    generate_relation_files({'merged': merged_df})
         
 
 
     print("\n归一化互信息矩阵生成完成!")
-    return datasets
+    return True
 
 if __name__ == "__main__":
     print("=" * 60)
